@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+config.py
+.aider/
+.vscode/
+.idea/
+.DS_Store
