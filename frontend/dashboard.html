@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrediFlux – Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Ensure canvas has fixed height for proper graph rendering */
+        .debt-canvas {
+            background-color: var(--bg3);
+            border-radius: 8px;
+            width: 100%;
+            height: 350px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar (unchanged) -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="hamburger"><i class="fas fa-bars"></i></span>
+                <div class="logo-text"><span class="cred">CREDI</span><span class="flux">FLUX</span></div>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item active" data-page="dashboard"><i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-page="groups"><i class="fas fa-users"></i> <span>My Groups</span></div>
+                <div class="nav-item" data-page="transactions"><i class="fas fa-history"></i> <span>Transactions</span>
+                </div>
+                <div class="nav-item" data-page="settlements"><i class="fas fa-balance-scale"></i>
+                    <span>Settlements</span>
+                </div>
+                <div class="nav-item" data-page="profile"><i class="fas fa-user"></i> <span>Profile</span></div>
+            </div>
+            <button class="logout-btn">Logout</button>
+        </div>
+        <!-- Main content -->
+        <div class="main-content">
+            <div class="stats-row">
+                <div class="stat-card red">
+                    <div class="title">TOTAL OWED</div>
+                    <div class="amount" id="totalOwed">Rs. 0</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="title">TOTAL TO COLLECT</div>
+                    <div class="amount" id="totalToCollect">Rs. 0</div>
+                </div>
+            </div>
+            <div class="two-columns">
+                <div class="left-column">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Optimized Debt Graph</h3>
+                            <button id="addDebtBtn" class="btn-sm btn-green"><i class="fas fa-plus"></i> Add</button>
+                        </div>
+                        <canvas id="debtGraphCanvas" class="debt-canvas" width="500" height="350"></canvas>
+                    </div>
+                    <div class="card">
+                        <h3>Optimized Payments</h3>
+                        <table class="data-table" id="paymentsTable">
+                            <thead>
+                                <tr>
+                                    <th>Peer</th>
+                                    <th>Amount</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="right-column">
+                    <div class="card">
+                        <h3>Upcoming Due Dates</h3>
+                        <ul class="action-list" id="dueDatesList">
+                            <li>Bilal Sent Alert – Pay Now</li>
+                            <li>Electricity Bill (Group: Hostel) – Due in 2 days</li>
+                            <li>Trip Expenses – Due in 5 days</li>
+                        </ul>
+                    </div>
+                    <div class="card">
+                        <h3>Payment Confirmations</h3>
+                        <ul class="action-list" id="confirmationsList"></ul>
+                    </div>
+                    <div class="card">
+                        <h3>Incoming Debt Requests</h3>
+                        <ul class="action-list" id="debtRequestsList"></ul>
+                    </div>
+                    <div class="card">
+                        <h3>Recent Transactions</h3>
+                        <table class="data-table" id="recentTransactions">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Amount</th>
+                                    <th>Paid To</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Debt Modal -->
+    <div id="addDebtModal" class="modal">
+        <div class="modal-content">
+            <h3>Add Direct Debt</h3><input type="tel" id="debtPhone" placeholder="Other user's phone number"><input
+                type="number" id="debtAmount" placeholder="Amount (Rs.)">
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;"><button id="debtDirectionOwe" class="btn-sm"
+                    style="background-color:var(--red); color:white;">I owe them</button><button id="debtDirectionOwed"
+                    class="btn-sm btn-green">They owe me</button></div>
+            <div class="modal-buttons"><button id="confirmDebtBtn" class="btn-sm btn-green">Confirm</button><button
+                    onclick="hideModal('addDebtModal')" class="btn-sm">Cancel</button></div>
+        </div>
+    </div>
+
+    <!-- Pay Now Modal -->
+    <div id="payNowModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3 id="payModalTitle" style="margin-bottom: 20px;">Pay Now</h3>
+            <div class="input-group" style="margin-bottom: 15px;"><label>Receiver's Number</label>
+                <div style="display: flex; gap: 10px;"><input type="text" id="receiverNumber" readonly
+                        style="flex:1;"><button id="copyNumberBtn" class="btn-sm btn-blue">Copy Number</button></div>
+            </div>
+            <div style="background-color: var(--bg3); padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                <p style="font-weight: bold; margin-bottom: 8px;">📱 Open EasyPaisa app on your device</p>
+                <ol style="margin-left: 20px; color: var(--text2); font-size: 13px;">
+                    <li>Enter Receiver's Number</li>
+                    <li>Enter the Amount</li>
+                    <li>Click Send</li>
+                    <li>Then return to the application and click <strong>Paid</strong></li>
+                </ol>
+            </div>
+            <div class="input-group" style="margin-bottom: 20px;"><label>Amount to be paid</label><input type="text"
+                    id="payAmount" readonly></div>
+            <p style="color: var(--text2); font-size: 12px; margin-bottom: 20px;">Once the receiver confirms payment,
+                the debt will be gone.</p>
+            <div class="modal-buttons" style="display: flex; gap: 12px; justify-content: flex-end;"><button id="paidBtn"
+                    class="btn-sm btn-green">Paid</button><button onclick="hideModal('payNowModal')"
+                    class="btn-sm">Cancel</button></div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let selectedDirection = 'owe';
+        function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
+        function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+        function openPayModal(creditor, amount, phone) {
+            document.getElementById('payModalTitle').innerText = `Pay Rs. ${amount} to ${creditor}`;
+            document.getElementById('receiverNumber').value = phone;
+            document.getElementById('payAmount').value = `Rs. ${amount}`;
+            showModal('payNowModal');
+        }
+
+        async function loadDashboard() {
+            const user = getCurrentUser();
+            if (!user) { window.location.href = 'index.html'; return; }
+            const data = await API.getDashboardData();
+            document.getElementById('totalOwed').innerText = `Rs. ${data.totalOwed}`;
+            document.getElementById('totalToCollect').innerText = `Rs. ${data.totalToCollect}`;
+            // Draw graph after a short delay to ensure canvas dimensions are ready
+            setTimeout(() => {
+                drawDebtGraph('debtGraphCanvas', data.settlements, user.username);
+            }, 100);
+            // Payments table
+            const tbody = document.querySelector('#paymentsTable tbody');
+            tbody.innerHTML = '';
+            data.settlements.forEach(s => {
+                const row = tbody.insertRow();
+                const peer = s.debtor === user.username ? s.creditor : s.debtor;
+                row.insertCell(0).innerText = peer;
+                row.insertCell(1).innerText = `Rs. ${s.amount}`;
+                const actionCell = row.insertCell(2);
+                if (s.debtor === user.username) {
+                    const btn = document.createElement('button');
+                    btn.textContent = 'Pay Now';
+                    btn.className = 'btn-sm btn-green';
+                    btn.onclick = () => openPayModal(peer, s.amount, '03001234567');
+                    actionCell.appendChild(btn);
+                } else {
+                    const btn = document.createElement('button');
+                    btn.textContent = 'Request';
+                    btn.className = 'btn-sm btn-amber';
+                    btn.onclick = () => alert('Reminder sent (feature coming soon)');
+                    actionCell.appendChild(btn);
+                }
+            });
+            // Confirmations
+            const confList = document.getElementById('confirmationsList');
+            confList.innerHTML = '';
+            data.paymentConfirmations.forEach(c => {
+                const li = document.createElement('li');
+                li.textContent = `${c.debtorName} sent you Rs. ${c.amount} to confirm (double-click)`;
+                li.ondblclick = async (e) => {
+                    e.preventDefault();
+                    if (confirm(`Confirm receipt of Rs. ${c.amount} from ${c.debtorName}?`)) {
+                        await API.confirmPayment(c.id);
+                        loadDashboard();
+                    }
+                };
+                confList.appendChild(li);
+            });
+            // Debt requests
+            const reqList = document.getElementById('debtRequestsList');
+            reqList.innerHTML = '';
+            data.debtRequests.forEach(r => {
+                const li = document.createElement('li');
+                li.textContent = `${r.fromUsername} needs to pay you Rs. ${r.amount} (double-click to accept)`;
+                li.ondblclick = async (e) => {
+                    e.preventDefault();
+                    if (confirm(`Accept Rs. ${r.amount} from ${r.fromUsername}?`)) {
+                        await API.acceptDebtRequest(r.id);
+                        loadDashboard();
+                    }
+                };
+                reqList.appendChild(li);
+            });
+            if (data.totalOwed === undefined) {
+                console.error('Invalid dashboard data:', data);
+                document.getElementById('totalOwed').innerText = 'Rs. 0';
+                document.getElementById('totalToCollect').innerText = 'Rs. 0';
+                return;
+            }
+            // Recent transactions
+            const recentTbody = document.querySelector('#recentTransactions tbody');
+            recentTbody.innerHTML = '';
+            data.recentTransactions.forEach(t => {
+                const row = recentTbody.insertRow();
+                row.insertCell(0).innerText = t.date;
+                row.insertCell(1).innerText = t.description;
+                row.insertCell(2).innerText = `Rs. ${t.amount}`;
+                row.insertCell(3).innerText = t.paidTo;
+            });
+        }
+        // Logout button handler
+        const logoutBtn = document.querySelector('.logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                clearToken();
+                window.location.href = 'index.html';
+            });
+        }
+        document.getElementById('addDebtBtn').onclick = () => showModal('addDebtModal');
+        document.getElementById('debtDirectionOwe').onclick = () => { selectedDirection = 'owe'; alert('You owe them'); };
+        document.getElementById('debtDirectionOwed').onclick = () => { selectedDirection = 'owed'; alert('They owe you'); };
+        document.getElementById('confirmDebtBtn').onclick = async () => {
+            const rawPhone = document.getElementById('debtPhone').value.trim();
+            const phoneDigits = rawPhone.replace(/\D/g, '');
+            const amount = document.getElementById('debtAmount').value;
+            if (!phoneDigits || !amount) { alert('Enter phone and amount'); return; }
+            const result = await API.requestDebt(phoneDigits, parseFloat(amount), selectedDirection);
+            if (!result.success) {
+                alert(result.message || 'Could not send debt request.');
+                return;
+            }
+            hideModal('addDebtModal');
+            loadDashboard();
+        };
+        document.getElementById('copyNumberBtn').onclick = () => {
+            const num = document.getElementById('receiverNumber').value;
+            navigator.clipboard.writeText(num);
+            alert('Number copied to clipboard');
+        };
+        document.getElementById('paidBtn').onclick = async () => {
+            alert('Payment confirmation request sent to creditor.');
+            hideModal('payNowModal');
+            loadDashboard();
+        };
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                if (page === 'dashboard') window.location.href = 'dashboard.html';
+                if (page === 'groups') window.location.href = 'groups.html';
+                if (page === 'transactions') window.location.href = 'transactions.html';
+                if (page === 'settlements') window.location.href = 'settlements.html';
+                if (page === 'profile') window.location.href = 'profile.html';
+            });
+        });
+        loadDashboard();
+    </script>
+</body>
+
+</html>
