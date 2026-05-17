@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrediFlux – Transactions</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="hamburger"><i class="fas fa-bars"></i></span>
+                <div class="logo-text"><span class="cred">CREDI</span><span class="flux">FLUX</span></div>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item" data-page="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-page="groups"><i class="fas fa-users"></i> <span>My Groups</span></div>
+                <div class="nav-item active" data-page="transactions"><i class="fas fa-history"></i>
+                    <span>Transactions</span>
+                </div>
+                <div class="nav-item" data-page="settlements"><i class="fas fa-balance-scale"></i>
+                    <span>Settlements</span>
+                </div>
+                <div class="nav-item" data-page="profile"><i class="fas fa-user"></i> <span>Profile</span></div>
+            </div>
+            <button class="logout-btn">Logout</button>
+        </div>
+        <div class="main-content">
+            <div class="card">
+                <div class="card-header">
+                    <h3>Transaction History</h3>
+                    <div>
+                        <input type="text" id="searchInput" placeholder="Search description or paid to"
+                            style="padding:6px;">
+                        <button id="searchBtn" class="btn-sm btn-blue">Apply</button>
+                        <button id="clearBtn" class="btn-sm">Clear</button>
+                    </div>
+                </div>
+                <table class="data-table" id="transactionsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Group</th>
+                            <th>Amount</th>
+                            <th>Paid To</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script src="js/app.js"></script>
+    <script>
+        let allTransactions = [];
+
+        async function loadTransactions() {
+            const data = await API.getTransactions();
+            allTransactions = data;
+            renderTransactions();
+        }
+
+        function renderTransactions(filter = '') {
+            const tbody = document.querySelector('#transactionsTable tbody');
+            tbody.innerHTML = '';
+            const filtered = allTransactions.filter(t =>
+                filter === '' || t.description.toLowerCase().includes(filter) || t.paidTo.toLowerCase().includes(filter)
+            );
+            filtered.forEach(t => {
+                const row = tbody.insertRow();
+                row.insertCell(0).innerText = t.date;
+                row.insertCell(1).innerText = t.description;
+                row.insertCell(2).innerText = t.group || '—';
+                row.insertCell(3).innerText = `Rs. ${t.amount}`;
+                row.insertCell(4).innerText = t.paidTo;
+            });
+        }
+
+        document.getElementById('searchBtn').onclick = () => {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            renderTransactions(search);
+        };
+        document.getElementById('clearBtn').onclick = () => {
+            document.getElementById('searchInput').value = '';
+            renderTransactions('');
+        };
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                if (page === 'dashboard') window.location.href = 'dashboard.html';
+                if (page === 'groups') window.location.href = 'groups.html';
+                if (page === 'transactions') window.location.href = 'transactions.html';
+                if (page === 'settlements') window.location.href = 'settlements.html';
+                if (page === 'profile') window.location.href = 'profile.html';
+            });
+        });
+        loadTransactions();
+    </script>
+</body>
+
+</html>

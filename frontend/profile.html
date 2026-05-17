@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrediFlux – Profile</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        .info-row {
+            display: flex;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+        }
+
+        .info-label {
+            width: 140px;
+            color: var(--text2);
+        }
+
+        .info-value {
+            flex: 1;
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .ep-field {
+            margin-bottom: 16px;
+        }
+
+        .ep-field label {
+            display: block;
+            font-size: 12px;
+            color: var(--text2);
+            margin-bottom: 6px;
+        }
+
+        .ep-field input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            background-color: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: var(--text2);
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .stat-value.red {
+            color: var(--red-light);
+        }
+
+        .stat-value.green {
+            color: var(--green-light);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="hamburger"><i class="fas fa-bars"></i></span>
+                <div class="logo-text">
+                    <span class="cred">CREDI</span><span class="flux">FLUX</span>
+                </div>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item" data-page="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-page="groups"><i class="fas fa-users"></i> <span>My Groups</span></div>
+                <div class="nav-item" data-page="transactions"><i class="fas fa-history"></i> <span>Transactions</span>
+                </div>
+                <div class="nav-item" data-page="settlements"><i class="fas fa-balance-scale"></i>
+                    <span>Settlements</span>
+                </div>
+                <div class="nav-item active" data-page="profile"><i class="fas fa-user"></i> <span>Profile</span></div>
+            </div>
+            <button class="logout-btn">Logout</button>
+        </div>
+
+        <!-- Main content -->
+        <div class="main-content">
+            <!-- Profile Info Card -->
+            <div class="card">
+                <h3><i class="fas fa-user-circle"></i> Profile Settings</h3>
+                <div style="display: flex; gap: 40px; flex-wrap: wrap; margin-top: 20px;">
+                    <!-- Left: user details (read-only) -->
+                    <div style="flex: 1;">
+                        <div class="info-row">
+                            <div class="info-label">Full Name</div>
+                            <div class="info-value" id="displayFullName">-</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Username</div>
+                            <div class="info-value" id="displayUsername">-</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">Phone</div>
+                            <div class="info-value" id="displayPhone">-</div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">EasyPaisa Number</div>
+                            <div class="info-value" id="displayEpNum">Not set</div>
+                        </div>
+                    </div>
+                    <!-- Right: update EasyPaisa -->
+                    <div style="flex: 1;">
+                        <div class="ep-field">
+                            <label>EasyPaisa Number</label>
+                            <input type="tel" id="easypaisaInput" placeholder="Enter 11-digit number">
+                        </div>
+                        <button id="updateEpBtn" class="btn-sm btn-green" style="width: 100%; padding: 12px;">
+                            <i class="fas fa-save"></i> Update Number
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="card" style="margin-top: 24px;">
+                <h3><i class="fas fa-chart-simple"></i> Your Stats</h3>
+                <div style="display: flex; gap: 48px; margin-top: 20px;">
+                    <div>
+                        <div class="stat-label">YOU OWE</div>
+                        <div class="stat-value red" id="youOwe">Rs. 0</div>
+                    </div>
+                    <div>
+                        <div class="stat-label">YOU ARE OWED</div>
+                        <div class="stat-value green" id="youAreOwed">Rs. 0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        async function loadProfile() {
+            const user = getCurrentUser();
+            if (!user) { window.location.href = 'index.html'; return; }
+            // Fetch fresh profile (already decrypted in API.getProfile)
+            const profile = await API.getProfile();
+            document.getElementById('displayFullName').innerText = profile.full_name || '-';
+            document.getElementById('displayUsername').innerText = profile.username || '-';
+            document.getElementById('displayPhone').innerText = profile.phone || '-';
+            const epNum = profile.easypaisa_num;
+            document.getElementById('displayEpNum').innerText = epNum ? epNum : 'Not set';
+            document.getElementById('easypaisaInput').value = epNum || '';
+            // Fetch dashboard data for stats (totals)
+            const dash = await API.getDashboardData();
+            document.getElementById('youOwe').innerHTML = `Rs. ${dash.totalOwed}`;
+            document.getElementById('youAreOwed').innerHTML = `Rs. ${dash.totalToCollect}`;
+        }
+
+        document.getElementById('updateEpBtn').onclick = async () => {
+            const newEp = document.getElementById('easypaisaInput').value.trim();
+            if (!newEp) {
+                alert('Please enter a valid EasyPaisa number');
+                return;
+            }
+            const res = await API.updateEasyPaisa(newEp);
+            if (res.success) {
+                alert('EasyPaisa number updated successfully');
+                loadProfile();
+            } else {
+                alert(res.message || 'Update failed');
+            }
+        };
+
+        // Navigation
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                if (page === 'dashboard') window.location.href = 'dashboard.html';
+                if (page === 'groups') window.location.href = 'groups.html';
+                if (page === 'transactions') window.location.href = 'transactions.html';
+                if (page === 'settlements') window.location.href = 'settlements.html';
+                if (page === 'profile') window.location.href = 'profile.html';
+            });
+        });
+
+        loadProfile();
+    </script>
+</body>
+
+</html>

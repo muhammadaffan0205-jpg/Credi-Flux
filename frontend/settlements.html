@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrediFlux – Settlements</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="hamburger"><i class="fas fa-bars"></i></span>
+                <div class="logo-text"><span class="cred">CREDI</span><span class="flux">FLUX</span></div>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item" data-page="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span>
+                </div>
+                <div class="nav-item" data-page="groups"><i class="fas fa-users"></i> <span>My Groups</span></div>
+                <div class="nav-item" data-page="transactions"><i class="fas fa-history"></i> <span>Transactions</span>
+                </div>
+                <div class="nav-item active" data-page="settlements"><i class="fas fa-balance-scale"></i>
+                    <span>Settlements</span>
+                </div>
+                <div class="nav-item" data-page="profile"><i class="fas fa-user"></i> <span>Profile</span></div>
+            </div>
+            <button class="logout-btn">Logout</button>
+        </div>
+        <div class="main-content">
+            <div class="stats-row" style="margin-bottom: 24px;">
+                <div class="stat-card red">
+                    <div class="title">TOTAL OWED</div>
+                    <div class="amount" id="totalOwed">Rs. 0</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="title">TOTAL TO COLLECT</div>
+                    <div class="amount" id="totalToCollect">Rs. 0</div>
+                </div>
+            </div>
+            <div class="card">
+                <h3 style="margin-bottom: 8px;">All Settlements</h3>
+                <p style="color: var(--text2); font-size: 13px; margin-bottom: 20px;">
+                    Direct debts and group balances combined. Use Pay Now the same way as on the dashboard.
+                </p>
+                <table class="data-table" id="settlementsTable">
+                    <thead>
+                        <tr>
+                            <th>Peer</th>
+                            <th>Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="settlementsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Now Modal (same as dashboard) -->
+    <div id="payNowModal" class="modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <h3 id="payModalTitle" style="margin-bottom: 20px;">Pay Now</h3>
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>Receiver's Number</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="receiverNumber" readonly style="flex:1;">
+                    <button id="copyNumberBtn" class="btn-sm btn-blue">Copy Number</button>
+                </div>
+            </div>
+            <div style="background-color: var(--bg3); padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                <p style="font-weight: bold; margin-bottom: 8px;">📱 Open EasyPaisa app on your device</p>
+                <ol style="margin-left: 20px; color: var(--text2); font-size: 13px;">
+                    <li>Enter Receiver's Number</li>
+                    <li>Enter the Amount</li>
+                    <li>Click Send</li>
+                    <li>Then return to the application and click <strong>Paid</strong></li>
+                </ol>
+            </div>
+            <div class="input-group" style="margin-bottom: 20px;">
+                <label>Amount to be paid</label>
+                <input type="text" id="payAmount" readonly>
+            </div>
+            <p style="color: var(--text2); font-size: 12px; margin-bottom: 20px;">Once the receiver confirms payment,
+                the debt will be gone.</p>
+            <div class="modal-buttons" style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="paidBtn" class="btn-sm btn-green">Paid</button>
+                <button onclick="hideModal('payNowModal')" class="btn-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let payModalContext = {};
+
+        function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
+        function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
+
+        function openPayModal(creditor, amount, phone, context = {}) {
+            document.getElementById('payModalTitle').innerText = `Pay Rs. ${amount} to ${creditor}`;
+            document.getElementById('receiverNumber').value = phone || '';
+            document.getElementById('payAmount').value = `Rs. ${amount}`;
+            payModalContext = {
+                creditorUsername: creditor,
+                amount: typeof amount === 'number' ? amount : parseFloat(amount),
+                directDebtId: context.directDebtId,
+                settlementId: context.settlementId,
+                netPayment: context.netPayment || false,
+            };
+            showModal('payNowModal');
+        }
+
+        async function loadSettlements() {
+            const user = getCurrentUser();
+            if (!user) { window.location.href = 'index.html'; return; }
+            const data = await API.getSettlementsData();
+            document.getElementById('totalOwed').innerText = `Rs. ${data.totalOwed ?? 0}`;
+            document.getElementById('totalToCollect').innerText = `Rs. ${data.totalToCollect ?? 0}`;
+            renderObligationsTable(
+                document.getElementById('settlementsTableBody'),
+                data.payActions,
+                data.collectActions,
+                openPayModal,
+                (ctx) => API.sendPaymentReminder(ctx)
+            );
+        }
+
+        document.getElementById('copyNumberBtn').onclick = () => {
+            const num = document.getElementById('receiverNumber').value;
+            navigator.clipboard.writeText(num);
+            alert('Number copied to clipboard');
+        };
+
+        document.getElementById('paidBtn').onclick = async () => {
+            const ctx = payModalContext;
+            if (!ctx.creditorUsername || ctx.amount == null || isNaN(ctx.amount)) {
+                alert('Invalid payment data.');
+                return;
+            }
+            if (ctx.directDebtId == null && ctx.settlementId == null && !ctx.netPayment) {
+                alert('Missing payment reference. Use Pay Now from the table again.');
+                return;
+            }
+            const res = await API.requestPaymentConfirmation(ctx);
+            if (res.success) {
+                alert('Payment confirmation sent to the receiver.');
+                hideModal('payNowModal');
+                loadSettlements();
+            } else {
+                alert(res.message || 'Could not send confirmation');
+            }
+        };
+
+        document.querySelector('.logout-btn').addEventListener('click', () => {
+            clearToken();
+            window.location.href = 'index.html';
+        });
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                if (page === 'dashboard') window.location.href = 'dashboard.html';
+                if (page === 'groups') window.location.href = 'groups.html';
+                if (page === 'transactions') window.location.href = 'transactions.html';
+                if (page === 'settlements') window.location.href = 'settlements.html';
+                if (page === 'profile') window.location.href = 'profile.html';
+            });
+        });
+
+        loadSettlements();
+    </script>
+</body>
+
+</html>

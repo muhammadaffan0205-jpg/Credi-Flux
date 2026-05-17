@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrediFlux – My Groups</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span class="hamburger"><i class="fas fa-bars"></i></span>
+                <div class="logo-text"><span class="cred">CREDI</span><span class="flux">FLUX</span></div>
+            </div>
+            <div class="nav-items">
+                <div class="nav-item" data-page="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></div>
+                <div class="nav-item active" data-page="groups"><i class="fas fa-users"></i> <span>My Groups</span></div>
+                <div class="nav-item" data-page="transactions"><i class="fas fa-history"></i> <span>Transactions</span></div>
+                <div class="nav-item" data-page="settlements"><i class="fas fa-balance-scale"></i> <span>Settlements</span></div>
+                <div class="nav-item" data-page="profile"><i class="fas fa-user"></i> <span>Profile</span></div>
+            </div>
+            <button class="logout-btn">Logout</button>
+        </div>
+
+        <div class="main-content" style="overflow-y: auto;">
+            <div class="groups-page-header">
+                <h1>My <span class="flux">Groups</span></h1>
+                <button id="createGroupOpenBtn" class="btn-sm btn-green" style="padding: 10px 18px;">
+                    <i class="fas fa-plus"></i> Create New Group
+                </button>
+            </div>
+
+            <div class="groups-search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="groupSearch" class="groups-search" placeholder="Search groups...">
+            </div>
+
+            <div id="groupsContainer"></div>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div id="createGroupModal" class="modal">
+        <div class="modal-content">
+            <h3>Create New Group</h3>
+            <input type="text" id="newGroupName" placeholder="Group name" style="width:100%; margin: 16px 0;">
+            <div class="modal-buttons">
+                <button id="createGroupBtn" class="btn-sm btn-green">Create</button>
+                <button onclick="hideModal('createGroupModal')" class="btn-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invite Member Modal -->
+    <div id="inviteModal" class="modal">
+        <div class="modal-content">
+            <h3 id="inviteModalTitle">Invite Member</h3>
+            <p style="color:var(--text2); font-size:13px; margin: 12px 0;">Enter their CrediFlux username to add them.</p>
+            <input type="text" id="inviteMemberName" placeholder="Username" style="width:100%; margin-bottom: 16px;">
+            <div class="modal-buttons">
+                <button id="inviteMemberBtn" class="btn-sm btn-green">Add Member</button>
+                <button onclick="hideModal('inviteModal')" class="btn-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Group Debt Modal -->
+    <div id="addGroupDebtModal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <h3>Add Group Debt</h3>
+            <input type="text" id="memberSearch" placeholder="Search member by name..." style="width:100%; margin: 12px 0;">
+            <div id="memberPickList" class="member-pick-list"></div>
+            <input type="number" id="groupDebtAmount" placeholder="Amount (Rs.)" style="width:100%; margin-bottom: 12px;">
+            <div style="display:flex; gap:12px; margin-bottom:16px;">
+                <button type="button" id="groupDebtOwe" class="btn-sm" style="flex:1; background:var(--red); color:#fff;">I owe them</button>
+                <button type="button" id="groupDebtOwed" class="btn-sm btn-green" style="flex:1;">They owe me</button>
+            </div>
+            <div class="modal-buttons">
+                <button id="confirmGroupDebtBtn" class="btn-sm btn-green">Send Request</button>
+                <button onclick="hideModal('addGroupDebtModal')" class="btn-sm">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let groups = [];
+        let expandedGroupId = null;
+        let inviteGroupId = null;
+        let debtGroupId = null;
+        let selectedMember = null;
+        let groupDebtDirection = 'owe';
+        let groupDetailsCache = {};
+
+        function showModal(id) { document.getElementById(id).style.display = 'flex'; }
+        function hideModal(id) { document.getElementById(id).style.display = 'none'; }
+
+        function setGroupDebtDirection(dir) {
+            groupDebtDirection = dir;
+            document.getElementById('groupDebtOwe').style.opacity = dir === 'owe' ? '1' : '0.55';
+            document.getElementById('groupDebtOwed').style.opacity = dir === 'owed' ? '1' : '0.55';
+        }
+
+        async function loadGroups() {
+            groups = await API.getGroups();
+            renderGroups();
+        }
+
+        function renderGroups() {
+            const q = document.getElementById('groupSearch').value.trim().toLowerCase();
+            const container = document.getElementById('groupsContainer');
+            container.innerHTML = '';
+            const filtered = groups.filter(g => !q || g.name.toLowerCase().includes(q));
+            if (!filtered.length) {
+                container.innerHTML = '<p style="color:var(--text2); text-align:center;">No groups yet. Create one to get started.</p>';
+                return;
+            }
+            filtered.forEach(g => {
+                const card = document.createElement('div');
+                card.className = 'group-card';
+                const isOpen = expandedGroupId === g.id;
+                card.innerHTML = `
+                    <div class="group-card-header">
+                        <div class="group-card-title">${g.name}</div>
+                        <div class="group-card-actions">
+                            <button class="btn-sm btn-green invite-btn" data-gid="${g.id}">Invite Members</button>
+                            <button class="btn-sm btn-blue pay-net-btn" data-gid="${g.id}">Pay Net Debt</button>
+                            <button class="btn-sm btn-green add-debt-btn" data-gid="${g.id}" title="Add debt"><i class="fas fa-plus"></i></button>
+                            <button class="btn-sm toggle-btn" data-gid="${g.id}" style="background:var(--bg3);">
+                                <i class="fas fa-chevron-${isOpen ? 'up' : 'down'}"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="group-card-body" id="group-body-${g.id}" style="display:${isOpen ? 'block' : 'none'};"></div>
+                `;
+                container.appendChild(card);
+                if (isOpen) loadGroupBody(g.id);
+            });
+
+            container.querySelectorAll('.invite-btn').forEach(btn => {
+                btn.onclick = () => openInvite(parseInt(btn.dataset.gid, 10));
+            });
+            container.querySelectorAll('.pay-net-btn').forEach(btn => {
+                btn.onclick = () => { window.location.href = 'settlements.html'; };
+            });
+            container.querySelectorAll('.add-debt-btn').forEach(btn => {
+                btn.onclick = () => openAddDebt(parseInt(btn.dataset.gid, 10));
+            });
+            container.querySelectorAll('.toggle-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const gid = parseInt(btn.dataset.gid, 10);
+                    expandedGroupId = expandedGroupId === gid ? null : gid;
+                    renderGroups();
+                };
+            });
+        }
+
+        async function loadGroupBody(groupId) {
+            const body = document.getElementById(`group-body-${groupId}`);
+            if (!body) return;
+            body.innerHTML = '<p style="padding:16px;color:var(--text2);">Loading graph...</p>';
+            const detail = await API.getGroupDetail(groupId);
+            groupDetailsCache[groupId] = detail;
+            const settlements = detail.settlements || [];
+            const user = getCurrentUser();
+            body.innerHTML = `
+                <div class="group-graph-wrap">
+                    <canvas id="group-canvas-${groupId}" class="group-graph-canvas"></canvas>
+                </div>
+                <ul class="group-settlements-mini" id="group-settlements-${groupId}"></ul>
+            `;
+            const list = document.getElementById(`group-settlements-${groupId}`);
+            if (settlements.length) {
+                settlements.forEach(s => {
+                    const li = document.createElement('li');
+                    li.textContent = `${s.debtor} → ${s.creditor}: Rs. ${s.amount}`;
+                    list.appendChild(li);
+                });
+            } else {
+                list.innerHTML = '<li>No debts in this group yet. Use + to add a debt between members.</li>';
+            }
+            const me = (detail.members || []).find(m => m.userId === user.user_id);
+            const youLabel = me ? me.displayName : user.username;
+            setTimeout(() => {
+                drawDebtGraph(`group-canvas-${groupId}`, settlements, youLabel);
+            }, 50);
+        }
+
+        function openInvite(groupId) {
+            inviteGroupId = groupId;
+            const g = groups.find(x => x.id === groupId);
+            document.getElementById('inviteModalTitle').textContent = `Invite to ${g ? g.name : 'Group'}`;
+            document.getElementById('inviteMemberName').value = '';
+            showModal('inviteModal');
+        }
+
+        async function openAddDebt(groupId) {
+            debtGroupId = groupId;
+            selectedMember = null;
+            setGroupDebtDirection('owe');
+            document.getElementById('memberSearch').value = '';
+            document.getElementById('groupDebtAmount').value = '';
+            const detail = groupDetailsCache[groupId] || await API.getGroupDetail(groupId);
+            groupDetailsCache[groupId] = detail;
+            renderMemberPickList(detail.members || []);
+            showModal('addGroupDebtModal');
+        }
+
+        function renderMemberPickList(members) {
+            const user = getCurrentUser();
+            const q = document.getElementById('memberSearch').value.trim().toLowerCase();
+            const list = document.getElementById('memberPickList');
+            list.innerHTML = '';
+            members
+                .filter(m => m.userId !== user.user_id && (!q || (m.displayName || '').toLowerCase().includes(q) || (m.username || '').toLowerCase().includes(q)))
+                .forEach(m => {
+                    const div = document.createElement('div');
+                    div.className = 'member-pick-item' + (selectedMember && selectedMember.userId === m.userId ? ' selected' : '');
+                    if (!m.canReceiveRequest) div.classList.add('disabled');
+                    div.textContent = m.canReceiveRequest
+                        ? (m.displayName + (m.username ? ` (@${m.username})` : ''))
+                        : `${m.displayName} (not on CrediFlux — invite first)`;
+                    if (m.canReceiveRequest) {
+                        div.onclick = () => {
+                            selectedMember = m;
+                            renderMemberPickList(members);
+                        };
+                    }
+                    list.appendChild(div);
+                });
+            if (!list.children.length) {
+                list.innerHTML = '<div style="padding:12px;color:var(--text2);">No other members found.</div>';
+            }
+        }
+
+        document.getElementById('createGroupOpenBtn').onclick = () => showModal('createGroupModal');
+        document.getElementById('createGroupBtn').onclick = async () => {
+            const name = document.getElementById('newGroupName').value.trim();
+            if (!name) return;
+            const res = await API.createGroup(name);
+            if (res.success) {
+                hideModal('createGroupModal');
+                document.getElementById('newGroupName').value = '';
+                await loadGroups();
+                expandedGroupId = res.group.id;
+                renderGroups();
+            } else {
+                alert(res.message || 'Could not create group');
+            }
+        };
+
+        document.getElementById('inviteMemberBtn').onclick = async () => {
+            const name = document.getElementById('inviteMemberName').value.trim();
+            if (!name || !inviteGroupId) return;
+            const res = await API.addMember(inviteGroupId, name);
+            alert(res.message || (res.success ? 'Member added' : 'Failed'));
+            if (res.success) {
+                hideModal('inviteModal');
+                delete groupDetailsCache[inviteGroupId];
+                if (expandedGroupId === inviteGroupId) loadGroupBody(inviteGroupId);
+            }
+        };
+
+        document.getElementById('memberSearch').oninput = () => {
+            const detail = groupDetailsCache[debtGroupId];
+            if (detail) renderMemberPickList(detail.members || []);
+        };
+
+        document.getElementById('groupDebtOwe').onclick = () => setGroupDebtDirection('owe');
+        document.getElementById('groupDebtOwed').onclick = () => setGroupDebtDirection('owed');
+
+        document.getElementById('confirmGroupDebtBtn').onclick = async () => {
+            if (!selectedMember || !selectedMember.userId) {
+                alert('Select a member who has a CrediFlux account.');
+                return;
+            }
+            const amount = parseFloat(document.getElementById('groupDebtAmount').value);
+            if (!amount || amount <= 0) {
+                alert('Enter a valid amount');
+                return;
+            }
+            const res = await API.requestGroupDebt(debtGroupId, selectedMember.userId, amount, groupDebtDirection);
+            alert(res.message || (res.success ? 'Request sent' : 'Failed'));
+            if (res.success) {
+                hideModal('addGroupDebtModal');
+            }
+        };
+
+        document.getElementById('groupSearch').oninput = renderGroups;
+
+        document.querySelector('.logout-btn').onclick = () => {
+            clearToken();
+            window.location.href = 'index.html';
+        };
+
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const page = item.dataset.page;
+                if (page === 'dashboard') window.location.href = 'dashboard.html';
+                if (page === 'groups') window.location.href = 'groups.html';
+                if (page === 'transactions') window.location.href = 'transactions.html';
+                if (page === 'settlements') window.location.href = 'settlements.html';
+                if (page === 'profile') window.location.href = 'profile.html';
+            });
+        });
+
+        const user = getCurrentUser();
+        if (!user) window.location.href = 'index.html';
+        else loadGroups();
+    </script>
+</body>
+
+</html>

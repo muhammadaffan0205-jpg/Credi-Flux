@@ -77,6 +77,15 @@ class UserRepo:
             cur.close()
 
     @staticmethod
+    def phones_match(user_id: int, phone: str) -> bool:
+        """True if phone belongs to user_id (handles format variants)."""
+        me = UserRepo.get_by_id(user_id)
+        if not me:
+            return False
+        other = UserRepo.get_by_phone(phone)
+        return other is not None and other.user_id == user_id
+
+    @staticmethod
     def get_by_id(user_id: int) -> Optional[User]:
         _, cur = get_db()
         try:
@@ -95,7 +104,7 @@ class UserRepo:
                 (ep_number, user_id)
             )
             conn.commit()
-            return True
+            return cur.rowcount > 0
         except Exception:
             conn.rollback()
             return False

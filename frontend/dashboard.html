@@ -79,11 +79,7 @@
                 <div class="right-column">
                     <div class="card">
                         <h3>Upcoming Due Dates</h3>
-                        <ul class="action-list" id="dueDatesList">
-                            <li>Bilal Sent Alert – Pay Now</li>
-                            <li>Electricity Bill (Group: Hostel) – Due in 2 days</li>
-                            <li>Trip Expenses – Due in 5 days</li>
-                        </ul>
+                        <ul class="action-list" id="dueDatesList"></ul>
                     </div>
                     <div class="card">
                         <h3>Payment Confirmations</h3>
@@ -155,12 +151,20 @@
     <script src="js/app.js"></script>
     <script>
         let selectedDirection = 'owe';
+        let payModalContext = {};
         function showModal(modalId) { document.getElementById(modalId).style.display = 'flex'; }
         function hideModal(modalId) { document.getElementById(modalId).style.display = 'none'; }
-        function openPayModal(creditor, amount, phone) {
+        function openPayModal(creditor, amount, phone, context = {}) {
             document.getElementById('payModalTitle').innerText = `Pay Rs. ${amount} to ${creditor}`;
-            document.getElementById('receiverNumber').value = phone;
+            document.getElementById('receiverNumber').value = phone || '';
             document.getElementById('payAmount').value = `Rs. ${amount}`;
+            payModalContext = {
+                creditorUsername: creditor,
+                amount: typeof amount === 'number' ? amount : parseFloat(amount),
+                directDebtId: context.directDebtId,
+                settlementId: context.settlementId,
+                netPayment: context.netPayment || false,
+            };
             showModal('payNowModal');
         }
 
@@ -174,33 +178,44 @@
             setTimeout(() => {
                 drawDebtGraph('debtGraphCanvas', data.settlements, user.username);
             }, 100);
-            // Payments table
-            const tbody = document.querySelector('#paymentsTable tbody');
-            tbody.innerHTML = '';
-            data.settlements.forEach(s => {
-                const row = tbody.insertRow();
-                const peer = s.debtor === user.username ? s.creditor : s.debtor;
-                row.insertCell(0).innerText = peer;
-                row.insertCell(1).innerText = `Rs. ${s.amount}`;
-                const actionCell = row.insertCell(2);
-                if (s.debtor === user.username) {
-                    const btn = document.createElement('button');
-                    btn.textContent = 'Pay Now';
-                    btn.className = 'btn-sm btn-green';
-                    btn.onclick = () => openPayModal(peer, s.amount, '03001234567');
-                    actionCell.appendChild(btn);
-                } else {
-                    const btn = document.createElement('button');
-                    btn.textContent = 'Request';
-                    btn.className = 'btn-sm btn-amber';
-                    btn.onclick = () => alert('Reminder sent (feature coming soon)');
-                    actionCell.appendChild(btn);
-                }
+            renderObligationsTable(
+                document.querySelector('#paymentsTable tbody'),
+                data.payActions,
+                data.collectActions,
+                openPayModal,
+                (ctx) => API.sendPaymentReminder(ctx)
+            );
+            const dueList = document.getElementById('dueDatesList');
+            dueList.innerHTML = '';
+            (data.paymentDueAlerts || []).forEach(alert => {
+                const li = document.createElement('li');
+                li.textContent = alert.message;
+                li.style.cursor = 'pointer';
+                li.ondblclick = (e) => {
+                    e.preventDefault();
+                    openPayModal(
+                        alert.creditorUsername,
+                        alert.amount,
+                        alert.creditorPayNumber || '',
+                        {
+                            directDebtId: alert.directDebtId,
+                            settlementId: alert.settlementId,
+                            netPayment: alert.netPayment || false,
+                        }
+                    );
+                };
+                dueList.appendChild(li);
             });
+            if (!(data.paymentDueAlerts || []).length) {
+                const li = document.createElement('li');
+                li.textContent = 'No payment requests right now.';
+                li.style.color = 'var(--text2)';
+                dueList.appendChild(li);
+            }
             // Confirmations
             const confList = document.getElementById('confirmationsList');
             confList.innerHTML = '';
-            data.paymentConfirmations.forEach(c => {
+            (data.paymentConfirmations || []).forEach(c => {
                 const li = document.createElement('li');
                 li.textContent = `${c.debtorName} sent you Rs. ${c.amount} to confirm (double-click)`;
                 li.ondblclick = async (e) => {
@@ -215,13 +230,15 @@
             // Debt requests
             const reqList = document.getElementById('debtRequestsList');
             reqList.innerHTML = '';
-            data.debtRequests.forEach(r => {
+            (data.debtRequests || []).forEach(r => {
                 const li = document.createElement('li');
-                li.textContent = `${r.fromUsername} needs to pay you Rs. ${r.amount} (double-click to accept)`;
+                li.textContent = r.message || `${r.debtorUsername} owes ${r.creditorUsername} Rs. ${r.amount} (double-click to accept)`;
                 li.ondblclick = async (e) => {
                     e.preventDefault();
-                    if (confirm(`Accept Rs. ${r.amount} from ${r.fromUsername}?`)) {
-                        await API.acceptDebtRequest(r.id);
+                    const summary = r.message || `${r.debtorUsername} owes ${r.creditorUsername} Rs. ${r.amount}`;
+                    if (confirm(`Accept this debt?\n\n${summary}`)) {
+                        const res = await API.acceptDebtRequest(r.id, r.kind || 'direct');
+                        if (!res.success) alert(res.message || 'Could not accept');
                         loadDashboard();
                     }
                 };
@@ -252,9 +269,19 @@
                 window.location.href = 'index.html';
             });
         }
-        document.getElementById('addDebtBtn').onclick = () => showModal('addDebtModal');
-        document.getElementById('debtDirectionOwe').onclick = () => { selectedDirection = 'owe'; alert('You owe them'); };
-        document.getElementById('debtDirectionOwed').onclick = () => { selectedDirection = 'owed'; alert('They owe you'); };
+        function setDebtDirection(dir) {
+            selectedDirection = dir;
+            const oweBtn = document.getElementById('debtDirectionOwe');
+            const owedBtn = document.getElementById('debtDirectionOwed');
+            oweBtn.style.opacity = dir === 'owe' ? '1' : '0.55';
+            owedBtn.style.opacity = dir === 'owed' ? '1' : '0.55';
+        }
+        document.getElementById('addDebtBtn').onclick = () => {
+            setDebtDirection('owe');
+            showModal('addDebtModal');
+        };
+        document.getElementById('debtDirectionOwe').onclick = () => setDebtDirection('owe');
+        document.getElementById('debtDirectionOwed').onclick = () => setDebtDirection('owed');
         document.getElementById('confirmDebtBtn').onclick = async () => {
             const rawPhone = document.getElementById('debtPhone').value.trim();
             const phoneDigits = rawPhone.replace(/\D/g, '');
@@ -265,7 +292,10 @@
                 alert(result.message || 'Could not send debt request.');
                 return;
             }
+            alert(result.message || 'Request sent.');
             hideModal('addDebtModal');
+            document.getElementById('debtPhone').value = '';
+            document.getElementById('debtAmount').value = '';
             loadDashboard();
         };
         document.getElementById('copyNumberBtn').onclick = () => {
@@ -274,9 +304,23 @@
             alert('Number copied to clipboard');
         };
         document.getElementById('paidBtn').onclick = async () => {
-            alert('Payment confirmation request sent to creditor.');
-            hideModal('payNowModal');
-            loadDashboard();
+            const ctx = payModalContext;
+            if (!ctx.creditorUsername || ctx.amount == null || isNaN(ctx.amount)) {
+                alert('Invalid payment data.');
+                return;
+            }
+            if (ctx.directDebtId == null && ctx.settlementId == null && !ctx.netPayment) {
+                alert('Missing payment reference. Close this dialog and use Pay Now from the table again.');
+                return;
+            }
+            const res = await API.requestPaymentConfirmation(ctx);
+            if (res.success) {
+                alert('Payment confirmation sent. The receiver can double-click it under Payment confirmations.');
+                hideModal('payNowModal');
+                loadDashboard();
+            } else {
+                alert(res.message || 'Could not send confirmation');
+            }
         };
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', () => {
